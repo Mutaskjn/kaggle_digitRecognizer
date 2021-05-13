@@ -7,12 +7,12 @@ from matplotlib import pyplot as plt
 class Model:
     def __init__(self):
         self.loss = 0
-        self.stepSize = 1e-3
+        self.stepSize = 0.1
 
-        self.m = 300
+        self.m = 10
         self.n = 784
-        self.d1 = 1000
-        self.d2 = 1000
+        self.d1 = 50
+        self.d2 = 20
         self.K = 10
 
         self.W1 = np.random.randn(self.d1, self.n)*np.sqrt(2/self.n)
@@ -22,9 +22,9 @@ class Model:
         self.h2 = np.zeros(self.d1)
         self.h1 = np.zeros(self.d2)
 
-        self.gradW1 = np.zeros((self.d1, self.n), float)
-        self.gradW2 = np.zeros((self.d2, self.d1), float)
-        self.gradW3 = np.zeros((self.d2, self.d1), float)
+        self.gradW1 = np.zeros((self.d1, self.n))
+        self.gradW2 = np.zeros((self.d2, self.d1))
+        self.gradW3 = np.zeros((self.K, self.d2))
 
         self.prob = np.zeros((self.K, self.m))
 
@@ -60,7 +60,7 @@ class Model:
 
         # from outputs to h2
         grad_h2 = np.matmul(np.transpose(self.W3), grad_Y)
-        grad_h2 = np.multiply(np.where(grad_h2 > 0, 1, 0), grad_h2)
+        grad_h2 = np.multiply(np.where(self.h2 > 0, 1, 0), grad_h2)
 
         # from h2 to W2
         self.gradW2 = np.moveaxis(np.broadcast_to(grad_h2, (self.d1, self.d2, self.m)), 0, 1)
@@ -77,7 +77,7 @@ class Model:
     def loss_function(self, Y, labels):
         # calculating probabilities for all y
         tmp = np.exp(Y)
-        self.prob = np.divide(tmp, np.sum(tmp, axis=0))
+        self.prob = np.minimum(np.divide(tmp, np.sum(tmp, axis=0)), 0.99)
 
         # calculating loss function
         self.loss = -np.mean(np.log10(self.prob[labels, np.arange(self.prob.shape[1])]))
@@ -86,28 +86,6 @@ class Model:
         self.W1 -= self.stepSize*self.gradW1
         self.W2 -= self.stepSize*self.gradW2
         self.W3 -= self.stepSize*self.gradW3
-
-    def clear_variables(self):
-
-        self.prob = np.zeros((self.K, self.m))
-
-        self.gradW1 = np.zeros((self.d1, self.n), float)
-        self.gradW2 = np.zeros((self.d2, self.d1), float)
-        self.gradW3 = np.zeros((self.d2, self.d1), float)
-
-    def test(self, testX):
-        #first hidden layer
-        h1 = [np.matmul(self.W1, np.transpose(testX[i,:]))+self.B1 for i in range(testX.shape[0])]
-        h1 = [np.maximum(0,h1[i]) for i in range(len(h1))]
-        
-        #second hidden layer
-        h2 = [np.matmul(self.W2, h1[i])+self.B2 for i in range(len(h1))]
-        h2 = [np.maximum(0,h2[i]) for i in range(len(h2))]
-        
-        #The result
-        Y = [np.matmul(self.W3, h2[i])+self.B3 for i in range(len(h2))]
-
-        return Y
 
 
 def accuracy(calculatedY, label):
@@ -135,15 +113,17 @@ if __name__ == '__main__':
     trainSet, validationSet, labelTrainSet, labelValSet = train_test_split(dataset, label, train_size=0.8, random_state=42, stratify=label)
 
     # Training
+    sampleNum = 5
     trainSet = np.true_divide(trainSet, 255)  # normalization
-    X = np.transpose(trainSet[0:300])
-    Y = labelTrainSet[0:300]
+    X = np.transpose(trainSet[0:sampleNum])
+    Y = labelTrainSet[0:sampleNum]
 
     # initializations for model
     model = Model()
     numIter = 1000
     accuracyTrain = np.zeros(numIter)
     accuracyTest = np.zeros(numIter)
+    lossResults = np.zeros(numIter)
 
     # iterations
     for i in range(numIter):
@@ -156,15 +136,24 @@ if __name__ == '__main__':
 
         model.step()  # take the step to the optimum
 
-        model.clear_variables()
-
         accuracyTrain[i] = accuracy(Y_predict, Y)  # Accuracy calculation on the training and validation
+
+        lossResults[i] = model.loss
 
         print(i, "  ", accuracyTrain[i], "  ", model.loss)
 
     plt.plot(np.arange(numIter), accuracyTrain)
+    plt.title("Accuracy on training data vs Iteration (with " + str(sampleNum) + " samples and " + str(numIter) + " iterations)")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Iterations")
     plt.show()
 
-    pd.DataFrame(model.W1).to_csv("W1.csv")
-    pd.DataFrame(model.W2).to_csv("W2.csv")
-    pd.DataFrame(model.W3).to_csv("W3.csv")
+    plt.plot(np.arange(numIter), lossResults)
+    plt.title("Error value vs Iteration (with " + str(sampleNum) + " samples and " + str(numIter) + " iterations)")
+    plt.ylabel("Error")
+    plt.xlabel("Iterations")
+    plt.show()
+
+    # pd.DataFrame(model.W1).to_csv("W1.csv")
+    # pd.DataFrame(model.W2).to_csv("W2.csv")
+    # pd.DataFrame(model.W3).to_csv("W3.csv")
