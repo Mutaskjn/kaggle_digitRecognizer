@@ -5,9 +5,8 @@ from matplotlib import pyplot as plt
 
 
 class Model:
-    def __init__(self, dimx, dimh1, dimh2, dimy):
-        self.loss = 0
-        self.stepSize = 0.1
+    def __init__(self, dimx=None, dimh1=None, dimh2=None, dimy=None, step_size=None):
+        self.stepSize = step_size
 
         self.m = 0
         self.n = dimx
@@ -26,40 +25,42 @@ class Model:
         self.gradW2 = np.zeros((self.d2, self.d1))
         self.gradW3 = np.zeros((self.K, self.d2))
 
-        self.prob = np.array(None)
-
-    def forward(self, X):
+    def forward(self, x):
         # get the number of inputs
-        self.m = X.shape[1]
+        self.m = x.shape[1]
 
         # first hidden layer
-        self.h1 = np.maximum(0, np.matmul(self.W1, X))
+        self.h1 = np.maximum(0, np.matmul(self.W1, x))
 
         # second hidden layer
         self.h2 = np.maximum(0, np.matmul(self.W2, self.h1))
 
-        # the result
-        prediction = np.matmul(self.W3, self.h2)
+        # y calculation
+        y = np.matmul(self.W3, self.h2)
+
+        # softmax calculation
+        tmp = np.exp(y)
+        prediction = np.minimum(np.divide(tmp, np.sum(tmp, axis=0)), 0.99)
 
         return prediction
 
-    def backward(self, X, labels):
+    def backward(self, x, prob, labels):
         # back propagation
         # from loss function to probabilities
-        prob_true = self.prob[labels, np.arange(self.prob.shape[1])]
-        grad_log = np.divide(1, np.multiply(-np.log(10), prob_true))
+        true_label_prob = prob[labels, np.arange(prob.shape[1])]
+        grad_log = np.divide(1, np.multiply(-np.log(10), true_label_prob))
 
         # from probabilities to outputs
-        grad_Y = np.multiply(-prob_true, self.prob)
-        grad_Y[labels, np.arange(self.prob.shape[1])] += prob_true
-        grad_Y = np.multiply(grad_Y, grad_log)
+        grad_y = np.multiply(-true_label_prob, prob)
+        grad_y[labels, np.arange(prob.shape[1])] += true_label_prob
+        grad_y = np.multiply(grad_y, grad_log)
 
         # from outputs to W3
-        self.gradW3 = np.moveaxis(np.broadcast_to(grad_Y, (self.d2, self.K, self.m)), 0, 1)
+        self.gradW3 = np.moveaxis(np.broadcast_to(grad_y, (self.d2, self.K, self.m)), 0, 1)
         self.gradW3 = np.mean(np.multiply(self.gradW3, np.broadcast_to(self.h2, (self.K, self.d2, self.m))), axis=-1)
 
         # from outputs to h2
-        grad_h2 = np.matmul(np.transpose(self.W3), grad_Y)
+        grad_h2 = np.matmul(np.transpose(self.W3), grad_y)
         grad_h2 = np.multiply(np.where(self.h2 > 0, 1, 0), grad_h2)
 
         # from h2 to W2
@@ -72,15 +73,7 @@ class Model:
 
         # from h1 to W1
         self.gradW1 = np.moveaxis(np.broadcast_to(grad_h1, (self.n, self.d1, self.m)), 0, 1)
-        self.gradW1 = np.mean(np.multiply(self.gradW1, np.broadcast_to(X, (self.d1, self.n, self.m))), axis=-1)
-
-    def loss_function(self, Y, labels):
-        # calculating probabilities for all y
-        tmp = np.exp(Y)
-        self.prob = np.minimum(np.divide(tmp, np.sum(tmp, axis=0)), 0.99)
-
-        # calculating loss function
-        self.loss = -np.mean(np.log10(self.prob[labels, np.arange(self.prob.shape[1])]))
+        self.gradW1 = np.mean(np.multiply(self.gradW1, np.broadcast_to(x, (self.d1, self.n, self.m))), axis=-1)
 
     def step(self):
         self.W1 -= self.stepSize*self.gradW1
@@ -88,11 +81,17 @@ class Model:
         self.W3 -= self.stepSize*self.gradW3
 
 
-def accuracy(calculatedY, label):
+def loss_function(prob, labels):
+    # calculating loss function
+    error = -np.mean(np.log10(prob[labels, np.arange(prob.shape[1])]))
 
-    prediction = calculatedY.argmax(axis=0)
+    return error
 
-    acc = np.sum((prediction == label))/len(label)
+
+def accuracy_calc(results, truth):
+
+    prediction = results.argmax(axis=0)
+    acc = np.sum((prediction == truth))/len(truth)
 
     return int(acc*100)
 
@@ -110,64 +109,64 @@ if __name__ == '__main__':
     dataset = df.to_numpy()
 
     # splitting the data into training and validation sets
-    trainSet, validationSet, labelTrainSet, labelValSet = train_test_split(dataset, label, train_size=0.8, random_state=42, stratify=label)
+    trainSet, valSet, labelTrainSet, labelValSet = train_test_split(dataset, label, train_size=0.8, random_state=42, stratify=label)
     trainSet = np.transpose(trainSet)
     trainSet = np.true_divide(trainSet, 255)  # normalization
 
-    validationSet = np.transpose(validationSet)
-    validationSet = np.true_divide(validationSet, 255)  # normalization
+    valSet = np.transpose(valSet)
+    valSet = np.true_divide(valSet, 255)  # normalization
 
-    # split the training set (it is too big)
-    splitBy = 100
-    trainingBatchList = np.split(trainSet, splitBy, axis=1)
-    trainingBatchLabel = np.split(labelTrainSet, splitBy)
-    valBatchList = np.split(validationSet, splitBy, axis=1)
-    valBatchLabel = np.split(labelValSet, splitBy)
+    # get the batch size
+    batchSize = 32
 
     # initializations for model
-    model = Model(784, 50, 20, 10)
+    model = Model(dimx=trainSet.shape[0], dimh1=50, dimh2=20, dimy=10, step_size=0.1)
 
     # initialization for measurements
-    numIter = 20
-
     accuracyTrain = []
     accuracyVal = []
     lossTrain = []
     lossVal = []
 
     loss = 0
-    acc = 0
+    accuracy = 0
 
     # iterations
+    trainBatchIter = trainSet.shape[1]//batchSize + (trainSet.shape[1] % batchSize > 0)
+    valBatchIter = valSet.shape[1]//batchSize + (valSet.shape[1] % batchSize > 0)
+    numIter = 3
+
     for k in range(numIter):
         print(k)
-        acc = 0
+        accuracy = 0
         loss = 0
 
-        for i in range(len(trainingBatchList)):
-            Y_train = model.forward(trainingBatchList[i])  # forward calculation
-            model.loss_function(Y_train, trainingBatchLabel[i])  # loss calculation
-            model.backward(trainingBatchList[i], trainingBatchLabel[i])  # back propagation
+        for i in range(trainBatchIter):
+            LB = i*batchSize  # Lower Bound
+            UB = min((i+1)*batchSize, trainSet.shape[1])  # Upper Bound
+            Y_train = model.forward(trainSet[:, LB:UB])  # forward calculation
+            loss += loss_function(Y_train, labelTrainSet[LB:UB])  # loss calculation
+            model.backward(trainSet[:, LB:UB], Y_train,  labelTrainSet[LB:UB])  # back propagation
             model.step()  # take the step to the optimum
 
-            acc += accuracy(Y_train, trainingBatchLabel[i])  # Accuracy calculation on the training
-            loss += model.loss # Loss calculation on the training
+            accuracy += accuracy_calc(Y_train, labelTrainSet[LB:UB])  # Accuracy calculation on the training
 
-        accuracyTrain.append(acc/len(trainingBatchList))
-        lossTrain.append(loss/len(trainingBatchList))
+        accuracyTrain.append(accuracy/trainBatchIter)
+        lossTrain.append(loss/trainBatchIter)
 
-        acc = 0
+        accuracy = 0
         loss = 0
 
-        for i in range(len(valBatchList)):
-            Y_val = model.forward(valBatchList[i])  # forward calculation
-            model.loss_function(Y_val, valBatchLabel[i])  # loss calculation
+        for i in range(valBatchIter):
+            LB = i*batchSize  # Lower Bound
+            UB = min((i+1)*batchSize, valSet.shape[1])  # Upper Bound
+            Y_val = model.forward(valSet[:, LB:UB])  # forward calculation
+            loss += loss_function(Y_val, labelValSet[LB:UB])  # loss calculation
 
-            acc += accuracy(Y_val, valBatchLabel[i])  # Accuracy calculation on the validation
-            loss += model.loss  # loss calculation on the validation
+            accuracy += accuracy_calc(Y_val, labelValSet[LB:UB])  # Accuracy calculation on the validation
 
-        accuracyVal.append(acc/len(valBatchList))
-        lossVal.append(loss/len(valBatchList))
+        accuracyVal.append(accuracy/valBatchIter)
+        lossVal.append(loss/valBatchIter)
 
     plt.plot(np.arange(numIter), accuracyTrain)
     plt.plot(np.arange(numIter), accuracyVal)
