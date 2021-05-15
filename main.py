@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 class Model:
     def __init__(self, dimx=None, dimh1=None, dimh2=None, dimy=None, step_size=None):
         self.stepSize = step_size
+        self.alfa = 1e-3
 
         self.m = 0
         self.n = dimx
@@ -40,6 +41,8 @@ class Model:
 
         # softmax calculation
         tmp = np.exp(y)
+        if np.isnan(np.mean(tmp)):
+            smt = 0
         prediction = np.minimum(np.divide(tmp, np.sum(tmp, axis=0)), 0.99)
 
         return prediction
@@ -58,6 +61,7 @@ class Model:
         # from outputs to W3
         self.gradW3 = np.moveaxis(np.broadcast_to(grad_y, (self.d2, self.K, self.m)), 0, 1)
         self.gradW3 = np.mean(np.multiply(self.gradW3, np.broadcast_to(self.h2, (self.K, self.d2, self.m))), axis=-1)
+        self.gradW3 = np.add(self.gradW3, np.multiply(self.alfa, np.where(self.W3 > 0, 1, -1)))
 
         # from outputs to h2
         grad_h2 = np.matmul(np.transpose(self.W3), grad_y)
@@ -66,6 +70,7 @@ class Model:
         # from h2 to W2
         self.gradW2 = np.moveaxis(np.broadcast_to(grad_h2, (self.d1, self.d2, self.m)), 0, 1)
         self.gradW2 = np.mean(np.multiply(self.gradW2, np.broadcast_to(self.h1, (self.d2, self.d1, self.m))), axis=-1)
+        self.gradW2 = np.add(self.gradW2, np.multiply(self.alfa, np.where(self.W2 > 0, 1, -1)))
 
         # from h2 to h1
         grad_h1 = np.matmul(np.transpose(self.W2), grad_h2)
@@ -74,6 +79,7 @@ class Model:
         # from h1 to W1
         self.gradW1 = np.moveaxis(np.broadcast_to(grad_h1, (self.n, self.d1, self.m)), 0, 1)
         self.gradW1 = np.mean(np.multiply(self.gradW1, np.broadcast_to(x, (self.d1, self.n, self.m))), axis=-1)
+        self.gradW1 = np.add(self.gradW1, np.multiply(self.alfa, np.where(self.W1 > 0, 1, -1)))
 
     def step(self):
         self.W1 -= self.stepSize*self.gradW1
@@ -134,10 +140,10 @@ if __name__ == '__main__':
     # iterations
     trainBatchIter = trainSet.shape[1]//batchSize + (trainSet.shape[1] % batchSize > 0)
     valBatchIter = valSet.shape[1]//batchSize + (valSet.shape[1] % batchSize > 0)
-    numIter = 3
+    numIter = 50
 
     for k in range(numIter):
-        print(k)
+        print(k, end=" ")
         accuracy = 0
         loss = 0
 
@@ -153,7 +159,7 @@ if __name__ == '__main__':
 
         accuracyTrain.append(accuracy/trainBatchIter)
         lossTrain.append(loss/trainBatchIter)
-
+        print(loss/trainBatchIter, end=" ")
         accuracy = 0
         loss = 0
 
@@ -167,6 +173,7 @@ if __name__ == '__main__':
 
         accuracyVal.append(accuracy/valBatchIter)
         lossVal.append(loss/valBatchIter)
+        print(loss/valBatchIter)
 
     plt.plot(np.arange(numIter), accuracyTrain)
     plt.plot(np.arange(numIter), accuracyVal)
