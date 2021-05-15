@@ -5,15 +5,15 @@ from matplotlib import pyplot as plt
 
 
 class Model:
-    def __init__(self):
+    def __init__(self, dimx, dimh1, dimh2, dimy):
         self.loss = 0
         self.stepSize = 0.1
 
-        self.m = 10
-        self.n = 784
-        self.d1 = 50
-        self.d2 = 20
-        self.K = 10
+        self.m = 0
+        self.n = dimx
+        self.d1 = dimh1
+        self.d2 = dimh2
+        self.K = dimy
 
         self.W1 = np.random.randn(self.d1, self.n)*np.sqrt(2/self.n)
         self.W2 = np.random.randn(self.d2, self.d1)*np.sqrt(2/self.d1)
@@ -26,10 +26,10 @@ class Model:
         self.gradW2 = np.zeros((self.d2, self.d1))
         self.gradW3 = np.zeros((self.K, self.d2))
 
-        self.prob = np.zeros((self.K, self.m))
+        self.prob = np.array(None)
 
     def forward(self, X):
-        # get the # of inputs
+        # get the number of inputs
         self.m = X.shape[1]
 
         # first hidden layer
@@ -94,7 +94,7 @@ def accuracy(calculatedY, label):
 
     acc = np.sum((prediction == label))/len(label)
 
-    return acc
+    return int(acc*100)
 
 
 if __name__ == '__main__':
@@ -111,49 +111,80 @@ if __name__ == '__main__':
 
     # splitting the data into training and validation sets
     trainSet, validationSet, labelTrainSet, labelValSet = train_test_split(dataset, label, train_size=0.8, random_state=42, stratify=label)
-
-    # Training
-    sampleNum = 5
+    trainSet = np.transpose(trainSet)
     trainSet = np.true_divide(trainSet, 255)  # normalization
-    X = np.transpose(trainSet[0:sampleNum])
-    Y = labelTrainSet[0:sampleNum]
+
+    validationSet = np.transpose(validationSet)
+    validationSet = np.true_divide(validationSet, 255)  # normalization
+
+    # split the training set (it is too big)
+    splitBy = 100
+    trainingBatchList = np.split(trainSet, splitBy, axis=1)
+    trainingBatchLabel = np.split(labelTrainSet, splitBy)
+    valBatchList = np.split(validationSet, splitBy, axis=1)
+    valBatchLabel = np.split(labelValSet, splitBy)
 
     # initializations for model
-    model = Model()
-    numIter = 1000
-    accuracyTrain = np.zeros(numIter)
-    accuracyTest = np.zeros(numIter)
-    lossResults = np.zeros(numIter)
+    model = Model(784, 50, 20, 10)
+
+    # initialization for measurements
+    numIter = 20
+
+    accuracyTrain = []
+    accuracyVal = []
+    lossTrain = []
+    lossVal = []
+
+    loss = 0
+    acc = 0
 
     # iterations
-    for i in range(numIter):
+    for k in range(numIter):
+        print(k)
+        acc = 0
+        loss = 0
 
-        Y_predict = model.forward(X)  # forward calculation
+        for i in range(len(trainingBatchList)):
+            Y_train = model.forward(trainingBatchList[i])  # forward calculation
+            model.loss_function(Y_train, trainingBatchLabel[i])  # loss calculation
+            model.backward(trainingBatchList[i], trainingBatchLabel[i])  # back propagation
+            model.step()  # take the step to the optimum
 
-        model.loss_function(Y_predict, Y)  # loss calculation
+            acc += accuracy(Y_train, trainingBatchLabel[i])  # Accuracy calculation on the training
+            loss += model.loss # Loss calculation on the training
 
-        model.backward(X, Y)  # back propagation
+        accuracyTrain.append(acc/len(trainingBatchList))
+        lossTrain.append(loss/len(trainingBatchList))
 
-        model.step()  # take the step to the optimum
+        acc = 0
+        loss = 0
 
-        accuracyTrain[i] = accuracy(Y_predict, Y)  # Accuracy calculation on the training and validation
+        for i in range(len(valBatchList)):
+            Y_val = model.forward(valBatchList[i])  # forward calculation
+            model.loss_function(Y_val, valBatchLabel[i])  # loss calculation
 
-        lossResults[i] = model.loss
+            acc += accuracy(Y_val, valBatchLabel[i])  # Accuracy calculation on the validation
+            loss += model.loss  # loss calculation on the validation
 
-        print(i, "  ", accuracyTrain[i], "  ", model.loss)
+        accuracyVal.append(acc/len(valBatchList))
+        lossVal.append(loss/len(valBatchList))
 
     plt.plot(np.arange(numIter), accuracyTrain)
-    plt.title("Accuracy on training data vs Iteration (with " + str(sampleNum) + " samples and " + str(numIter) + " iterations)")
+    plt.plot(np.arange(numIter), accuracyVal)
+    plt.title("Accuracy vs Iteration")
     plt.ylabel("Accuracy")
-    plt.xlabel("Iterations")
+    plt.xlabel("Iteration")
+    plt.legend(["Training set", "Validation set"])
     plt.show()
 
-    plt.plot(np.arange(numIter), lossResults)
-    plt.title("Error value vs Iteration (with " + str(sampleNum) + " samples and " + str(numIter) + " iterations)")
+    plt.plot(np.arange(numIter), lossTrain)
+    plt.plot(np.arange(numIter), lossVal)
+    plt.title("Error value vs Iteration")
     plt.ylabel("Error")
-    plt.xlabel("Iterations")
+    plt.xlabel("Iteration")
+    plt.legend(["Training set", "Validation set"])
     plt.show()
 
-    # pd.DataFrame(model.W1).to_csv("W1.csv")
-    # pd.DataFrame(model.W2).to_csv("W2.csv")
-    # pd.DataFrame(model.W3).to_csv("W3.csv")
+    np.save("W3.csv", model.W3)
+    np.save("W2.csv", model.W2)
+    np.save("W1.csv", model.W1)
