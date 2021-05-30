@@ -21,7 +21,7 @@ def accuracy_calc(results, truth):
 
 if __name__ == '__main__':
     
-    pathToTrainingData = "digit-recognizer/train.csv"
+    pathToTrainingData = "../digit-recognizer/train.csv"
 
     # getting the training data
     df = pd.read_csv(pathToTrainingData)

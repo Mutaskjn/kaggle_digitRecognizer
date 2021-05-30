@@ -5,7 +5,7 @@ from NN2Layer import NN2Layer
 
 if __name__ == '__main__':
 
-    pathToTestData = "digit-recognizer/test.csv"
+    pathToTestData = "../digit-recognizer/test.csv"
 
     df = pd.read_csv(pathToTestData)
     testSet = df.to_numpy()
@@ -14,9 +14,9 @@ if __name__ == '__main__':
 
     model = NN2Layer()
 
-    model.W3 = np.load("weights/W3.npy")
-    model.W2 = np.load("weights/W2.npy")
-    model.W1 = np.load("weights/W1.npy")
+    model.W3 = np.load("../weights/W3.npy")
+    model.W2 = np.load("../weights/W2.npy")
+    model.W1 = np.load("../weights/W1.npy")
 
     batchSize = 32
     testBatchIter = testSet.shape[1] // batchSize + (testSet.shape[1] % batchSize > 0)
