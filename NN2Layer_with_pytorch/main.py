@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from CustomDataset import CustomDataset
 from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader, random_split
@@ -25,14 +26,15 @@ def train_loop(dataloader, model, loss_fn, optimizer, device):
         loss.backward()
         optimizer.step()
 
-        # loss and accuracy calculation
-        correct += (pred.argmax(1) == y).type(torch.float).sum().item()
         train_loss += loss.item()
+        correct += (pred.argmax(1) == y).type(torch.float).sum().item()
 
     correct /= size
     train_loss /= size
 
-    print("Training loss:" + str(train_loss) + "   accuracy:" + str(correct*100) + "%  \n")
+    print("Training loss: {:.4f}  accuracy: {:.0f}%  \n".format(train_loss, 100*correct))
+
+    return train_loss, (100*correct)
 
 
 def test_loop(dataloader, model, loss_fn):
@@ -50,7 +52,10 @@ def test_loop(dataloader, model, loss_fn):
 
     test_loss /= size
     correct /= size
-    print("Test loss:" + str(test_loss) + "   accuracy:" + str(correct*100) + "%  \n")
+
+    print("Training loss: {:.4f}  accuracy: {:.0f}%  \n".format(test_loss, 100*correct))
+
+    return test_loss, (100*correct)
 
 
 if __name__ == "__main__":
@@ -74,21 +79,53 @@ if __name__ == "__main__":
 
     # hyper parameters
     learingRate = 1e-3
-    batchSize = 8
-    epochs = 10
+    batchSize = 16
+    epochs = 20
 
     # use DataLoader for efficiency
-    trainDataLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True)
+    trainDataLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True, num_workers=5)
     valDataLoader = DataLoader(valDataset, batch_size=batchSize, shuffle=True)
 
     # initializing loss function
     loss = nn.CrossEntropyLoss()
 
     # initializing optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=learingRate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learingRate, weight_decay=1e-5)
+
+    trainAcc = []
+    trainLoss = []
+
+    valAcc = []
+    valLoss = []
+
+    tmpAcc = 0
+    tmpLoss = 0
 
     for t in range(epochs):
         print(f"epoch {t+1} \n-----------------------")
-        train_loop(trainDataLoader, model, loss, optimizer, device)
-        test_loop(valDataLoader, model, loss)
+        tmpLoss, tmpAcc = train_loop(trainDataLoader, model, loss, optimizer, device)
+        trainLoss.append(tmpLoss)
+        trainAcc.append(tmpAcc)
+
+        tmpLoss, tmpAcc = test_loop(valDataLoader, model, loss)
+        valLoss.append(tmpLoss)
+        valAcc.append(tmpAcc)
     print("Done!!")
+
+    torch.save(model, "model.pth")
+
+    plt.plot(np.arange(epochs), trainAcc)
+    plt.plot(np.arange(epochs), valAcc)
+    plt.title("Accuracy vs Iteration")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Epochs")
+    plt.legend(["Training set", "Validation set"])
+    plt.show()
+
+    plt.plot(np.arange(epochs), trainLoss)
+    plt.plot(np.arange(epochs), valLoss)
+    plt.title("Error value vs Iteration")
+    plt.ylabel("Error")
+    plt.xlabel("Epochs")
+    plt.legend(["Training set", "Validation set"])
+    plt.show()
