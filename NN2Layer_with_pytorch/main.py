@@ -37,7 +37,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, device):
     return train_loss, (100*correct)
 
 
-def test_loop(dataloader, model, loss_fn):
+def test_loop(dataloader, model, loss_fn, device):
     size = len(dataloader.dataset)
     test_loss, correct = 0, 0
 
@@ -79,12 +79,12 @@ if __name__ == "__main__":
 
     # hyper parameters
     learingRate = 1e-3
-    batchSize = 16
+    batchSize = 64
     epochs = 20
 
     # use DataLoader for efficiency
     trainDataLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True, num_workers=5)
-    valDataLoader = DataLoader(valDataset, batch_size=batchSize, shuffle=True)
+    valDataLoader = DataLoader(valDataset, batch_size=batchSize, shuffle=True, num_workers=5)
 
     # initializing loss function
     loss = nn.CrossEntropyLoss()
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         trainLoss.append(tmpLoss)
         trainAcc.append(tmpAcc)
 
-        tmpLoss, tmpAcc = test_loop(valDataLoader, model, loss)
+        tmpLoss, tmpAcc = test_loop(valDataLoader, model, loss, device)
         valLoss.append(tmpLoss)
         valAcc.append(tmpAcc)
     print("Done!!")
